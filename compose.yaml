@@ -1,0 +1,85 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: oncoaid
+      POSTGRES_DB: oncoaid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oncoaid"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    environment:
+      ONE_CLICK_ACCESS: ${ONE_CLICK_ACCESS:-true}
+      WORKER_EMAIL: ${WORKER_EMAIL:-worker@oncoaid.local}
+      TWILIO_OUTBOUND_MODE: ${TWILIO_OUTBOUND_MODE:-disabled}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_WEBHOOK_URL: ${TWILIO_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      SARVAM_CHAT_MODEL: ${SARVAM_CHAT_MODEL:-sarvam-105b}
+      PGHOST: db
+      PGUSER: oncoaid
+      PGDATABASE: oncoaid
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@oncoaid.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+  processor:
+    build: .
+    command: ["python", "processing.py"]
+    environment:
+      TWILIO_OUTBOUND_MODE: ${TWILIO_OUTBOUND_MODE:-disabled}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_WEBHOOK_URL: ${TWILIO_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      PGHOST: db
+      PGUSER: oncoaid
+      PGDATABASE: oncoaid
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - api
+  telegram:
+    build: .
+    command: ["python", "telegram_channel.py"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      SARVAM_CHAT_MODEL: ${SARVAM_CHAT_MODEL:-sarvam-105b}
+      PGHOST: db
+      PGUSER: oncoaid
+      PGDATABASE: oncoaid
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - api
+  whatsapp-gateway:
+    image: nginx:1.28-alpine
+    volumes:
+      - ./whatsapp-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - api
+  dashboard:
+    build: .
+    command: ["streamlit", "run", "dashboard.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      - api
+volumes:
+  database:

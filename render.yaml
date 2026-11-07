@@ -1,0 +1,44 @@
+# Upload this application's files at your GitHub repository root.
+# Review Render's paid resource estimate before creating the Blueprint.
+services:
+  - type: web
+    name: oncoaid
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python cloud_start.py
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: oncoaid-db
+          property: connectionString
+      - key: ONE_CLICK_ACCESS
+        value: "true"
+      - key: ADMIN_EMAIL
+        value: admin@oncoaid.local
+      - key: WORKER_EMAIL
+        value: worker@oncoaid.local
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: SARVAM_CHAT_MODEL
+        value: sarvam-105b
+      - key: TWILIO_OUTBOUND_MODE
+        value: disabled
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+databases:
+  - name: oncoaid-db
+    region: singapore
+    plan: 0.1c-256mb
+    diskSizeGB: 5
+    postgresMajorVersion: "16"
+    ipAllowList: []
